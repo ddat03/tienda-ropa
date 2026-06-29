@@ -6,6 +6,7 @@ const { MENSAJES } = require('./mensajes');
 const { verificarStock, obtenerAlternativas } = require('../inventory/inventario');
 const { crearPedido } = require('../orders/pedidos');
 const { notificarDuena } = require('../notifications/alertas');
+const { extraerCodigoPedido, parsearDetallePrenda } = require('../utils/parser');
 
 const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
 
@@ -72,7 +73,7 @@ async function procesarMensaje(de, cuerpo, nombreContacto = '') {
     }
 
     // ── Flujo: código de cliente → pedido del live ────────────────────────────
-    const matchPedido = cuerpo.match(/^(ROC-[A-Z0-9]{4})\s+(.+)$/i);
+    const matchPedido = extraerCodigoPedido(cuerpo);
     if (matchPedido) {
       const codigoCliente = matchPedido[1].toUpperCase();
       const detallePedido = matchPedido[2].trim();
@@ -136,28 +137,6 @@ async function procesarMensaje(de, cuerpo, nombreContacto = '') {
     console.error('Error procesando mensaje:', err);
     await enviarMensaje(de, MENSAJES.errorGeneral());
   }
-}
-
-function parsearDetallePrenda(texto) {
-  const tallas = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', 'UNICA', 'ÚNICA'];
-  const palabras = texto.trim().split(/\s+/);
-
-  let talla = 'M';
-  let resto = [];
-
-  for (const pal of palabras) {
-    if (tallas.includes(pal.toUpperCase())) {
-      talla = pal.toUpperCase();
-    } else {
-      resto.push(pal);
-    }
-  }
-
-  // Heurística: la primera palabra es la prenda, el resto el color
-  const prenda = resto[0] || 'prenda';
-  const color = resto.slice(1).join(' ') || 'sin color';
-
-  return { prenda, color, talla };
 }
 
 module.exports = { procesarMensaje, enviarMensaje };

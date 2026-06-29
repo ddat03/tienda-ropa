@@ -12,7 +12,10 @@ const ESTADOS = {
 };
 
 async function crearPedido(datos) {
-  const { codigoCliente, clienteId, telefono, nombre, prenda, color, talla, textoOriginal } = datos;
+  const {
+    codigoCliente, clienteId, telefono, nombre, prenda, color, talla, textoOriginal,
+    origen = 'whatsapp', tiktokUser = null, sesionLiveId = null,
+  } = datos;
 
   const pedidoRef = await db.collection(COLECCIONES.PEDIDOS).add({
     codigoCliente,
@@ -23,6 +26,9 @@ async function crearPedido(datos) {
     color,
     talla,
     textoOriginal,
+    origen,
+    tiktokUser,
+    sesionLiveId,
     estado: ESTADOS.PENDIENTE,
     creadoEn: new Date(),
     actualizadoEn: new Date(),

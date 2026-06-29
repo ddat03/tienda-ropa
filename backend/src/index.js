@@ -33,6 +33,7 @@ app.use('/clientes', require('./routes/clientes'));
 app.use('/inventario', require('./routes/inventario'));
 app.use('/pedidos', require('./routes/pedidos'));
 app.use('/notificaciones', require('./routes/notificaciones'));
+app.use('/tiktok', require('./routes/tiktok'));
 
 // Health check
 app.get('/health', (_, res) => res.json({ status: 'ok', ts: new Date().toISOString() }));

@@ -1,15 +1,56 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { usePedidosLive } from '../../hooks/usePedidosLive';
 import { useApi } from '../../hooks/useApi';
 import toast from 'react-hot-toast';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Check, X, Radio } from 'lucide-react';
+import { Check, X, Radio, Wifi, WifiOff } from 'lucide-react';
 
 export default function PanelLive() {
   const { pedidos, loading } = usePedidosLive();
   const api = useApi();
   const [procesando, setProcesando] = useState(null);
+  const [liveActivo, setLiveActivo] = useState(false);
+  const [liveUsuario, setLiveUsuario] = useState('');
+  const [inputUsuario, setInputUsuario] = useState('');
+  const [conectando, setConectando] = useState(false);
+
+  useEffect(() => {
+    api.get('/tiktok/estado').then(data => {
+      setLiveActivo(data.activo);
+      if (data.usuario) setLiveUsuario(data.usuario);
+    }).catch(() => {});
+  }, []);
+
+  async function iniciarLive() {
+    if (!inputUsuario.trim()) return toast.error('Escribe el usuario de TikTok');
+    setConectando(true);
+    try {
+      const data = await api.post('/tiktok/iniciar', { usuario: inputUsuario.trim() });
+      setLiveActivo(true);
+      setLiveUsuario(data.sesion.usuario);
+      setInputUsuario('');
+      toast.success(`🔴 Conectado a @${data.sesion.usuario}`);
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setConectando(false);
+    }
+  }
+
+  async function detenerLive() {
+    setConectando(true);
+    try {
+      await api.post('/tiktok/detener');
+      setLiveActivo(false);
+      setLiveUsuario('');
+      toast.success('⏹️ Live de TikTok desconectado');
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setConectando(false);
+    }
+  }
 
   async function confirmar(pedidoId) {
     setProcesando(pedidoId);
@@ -49,6 +90,46 @@ export default function PanelLive() {
         </span>
       </div>
 
+      {/* Control TikTok Live */}
+      <div className="mb-4 bg-gray-900 rounded-2xl p-3 border border-gray-800">
+        {liveActivo ? (
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Wifi className="w-4 h-4 text-green-400" />
+              <span className="text-sm text-green-400 font-semibold">@{liveUsuario}</span>
+              <span className="text-xs text-gray-500">conectado</span>
+            </div>
+            <button
+              onClick={detenerLive}
+              disabled={conectando}
+              className="flex items-center gap-1.5 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 rounded-xl px-3 py-2 text-xs font-bold transition-colors"
+            >
+              <WifiOff className="w-3.5 h-3.5" />
+              {conectando ? 'Desconectando...' : 'Desconectar'}
+            </button>
+          </div>
+        ) : (
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder="Usuario TikTok (sin @)"
+              value={inputUsuario}
+              onChange={e => setInputUsuario(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && iniciarLive()}
+              className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm placeholder-gray-600 focus:outline-none focus:border-brand-500"
+            />
+            <button
+              onClick={iniciarLive}
+              disabled={conectando}
+              className="flex items-center gap-1.5 bg-brand-600 hover:bg-brand-500 disabled:opacity-50 rounded-xl px-3 py-2 text-xs font-bold transition-colors whitespace-nowrap"
+            >
+              <Wifi className="w-3.5 h-3.5" />
+              {conectando ? 'Conectando...' : 'Conectar'}
+            </button>
+          </div>
+        )}
+      </div>
+
       {/* Lista de pedidos */}
       {loading ? (
         <div className="text-center text-gray-500 py-16">Cargando pedidos...</div>
@@ -82,12 +163,17 @@ function TarjetaPedido({ pedido, procesando, onConfirmar, onRechazar }) {
     <div className="bg-gray-800 rounded-2xl p-4 border border-gray-700 active:scale-98 transition-transform">
       {/* Cabecera */}
       <div className="flex items-start justify-between mb-3">
-        <div>
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="bg-brand-600 text-white text-xs font-mono font-bold px-2 py-0.5 rounded-lg">
             {pedido.codigoCliente}
           </span>
+          {pedido.origen === 'tiktok' && (
+            <span className="bg-pink-900 text-pink-300 text-xs px-2 py-0.5 rounded-lg">
+              TikTok {pedido.tiktokUser ? `@${pedido.tiktokUser}` : ''}
+            </span>
+          )}
           {pedido.nombre && (
-            <span className="ml-2 text-gray-400 text-xs">{pedido.nombre}</span>
+            <span className="text-gray-400 text-xs">{pedido.nombre}</span>
           )}
         </div>
         <span className="text-gray-500 text-xs">{tiempoAtras}</span>
