@@ -3,7 +3,7 @@ const { db, COLECCIONES } = require('../firebase');
 const { generarCodigoUnico } = require('../utils/codigos');
 const { calcularFechaVencimiento, formatearFecha, diasRestantes, estaVencido } = require('../utils/fechas');
 const { MENSAJES } = require('./mensajes');
-const { verificarStock, obtenerAlternativas } = require('../inventory/inventario');
+const { verificarStock, buscarFuzzy, obtenerAlternativas } = require('../inventory/inventario');
 const { crearPedido } = require('../orders/pedidos');
 const { notificarDuena } = require('../notifications/alertas');
 const { extraerCodigoPedido, parsearDetallePrenda } = require('../utils/parser');
@@ -101,8 +101,18 @@ async function procesarMensaje(de, cuerpo, nombreContacto = '') {
       // Parsear prenda, color, talla del texto (ej: "blusa rosada M")
       const partes = parsearDetallePrenda(detallePedido);
 
-      // Verificar stock
-      const stockInfo = await verificarStock(partes.prenda, partes.color, partes.talla);
+      // Verificar stock exacto; si no hay, intentar fuzzy matching
+      let stockInfo = await verificarStock(partes.prenda, partes.color, partes.talla);
+
+      if (!stockInfo.disponible) {
+        const fuzzy = await buscarFuzzy(partes.prenda, partes.color, partes.talla);
+        if (fuzzy?.disponible) {
+          stockInfo = fuzzy;
+          partes.prenda = fuzzy.prendaCorregida;
+          partes.color = fuzzy.colorCorregido;
+          partes.talla = fuzzy.tallaCorregida;
+        }
+      }
 
       if (!stockInfo.disponible) {
         const alternativas = await obtenerAlternativas(partes.prenda, partes.color, partes.talla);
@@ -120,6 +130,7 @@ async function procesarMensaje(de, cuerpo, nombreContacto = '') {
         color: partes.color,
         talla: partes.talla,
         textoOriginal: cuerpo,
+        aproximado: stockInfo.aproximado || false,
       });
 
       await enviarMensaje(de,

@@ -1,7 +1,7 @@
 const { db, COLECCIONES } = require('../firebase');
 const { estaVencido } = require('../utils/fechas');
 const { extraerCodigoPedido, parsearDetallePrenda } = require('../utils/parser');
-const { verificarStock } = require('../inventory/inventario');
+const { verificarStock, buscarFuzzy } = require('../inventory/inventario');
 const { crearPedido } = require('../orders/pedidos');
 const { notificarDuena } = require('../notifications/alertas');
 
@@ -176,7 +176,19 @@ async function procesarComentario(data) {
   }
 
   const partes = parsearDetallePrenda(detalle);
-  const stockInfo = await verificarStock(partes.prenda, partes.color, partes.talla);
+
+  // Verificar stock exacto; si no hay, intentar fuzzy matching
+  let stockInfo = await verificarStock(partes.prenda, partes.color, partes.talla);
+
+  if (!stockInfo.disponible) {
+    const fuzzy = await buscarFuzzy(partes.prenda, partes.color, partes.talla);
+    if (fuzzy?.disponible) {
+      stockInfo = fuzzy;
+      partes.prenda = fuzzy.prendaCorregida;
+      partes.color = fuzzy.colorCorregido;
+      partes.talla = fuzzy.tallaCorregida;
+    }
+  }
 
   if (!stockInfo.disponible) {
     console.log(`[TikTok] Sin stock — ${codigoCliente}: ${partes.prenda} ${partes.color} ${partes.talla}`);
@@ -195,6 +207,7 @@ async function procesarComentario(data) {
     origen: 'tiktok',
     tiktokUser,
     sesionLiveId: sesionActual?.id || null,
+    aproximado: stockInfo.aproximado || false,
   });
 }
 

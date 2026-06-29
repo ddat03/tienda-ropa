@@ -120,6 +120,58 @@ async function eliminarPrenda(prendaId) {
   return db.collection(COLECCIONES.INVENTARIO).doc(prendaId).delete();
 }
 
+// Búsqueda aproximada cuando el nombre exacto no coincide con el inventario.
+// Usa Fuse.js (ESM) via dynamic import para evitar errores de módulo.
+async function buscarFuzzy(prenda, color, talla) {
+  const snap = await db.collection(COLECCIONES.INVENTARIO)
+    .where('cantidad', '>', 0)
+    .get();
+
+  if (snap.empty) return null;
+
+  const items = snap.docs.map(doc => {
+    const d = doc.data();
+    return {
+      id: doc.id,
+      ...d,
+      // Campo combinado para búsqueda fuzzy
+      _busqueda: `${d.nombreNormalizado} ${d.colorNormalizado}`,
+    };
+  });
+
+  const { default: Fuse } = await import('fuse.js');
+
+  const fuse = new Fuse(items, {
+    keys: ['_busqueda'],
+    threshold: 0.5,   // 0 = exacto, 1 = cualquier cosa — 0.5 es bastante permisivo
+    includeScore: true,
+    minMatchCharLength: 2,
+  });
+
+  const query = `${normalizar(prenda)} ${normalizar(color)}`;
+  const resultados = fuse.search(query);
+
+  if (!resultados.length) return null;
+
+  // Preferir resultado con la talla correcta
+  const conTalla = resultados.filter(r => r.item.talla === talla.toUpperCase());
+  const mejor = conTalla[0] || resultados[0];
+
+  // Rechazar si la confianza es muy baja (score > 0.45)
+  if ((mejor.score || 1) > 0.45) return null;
+
+  return {
+    disponible: mejor.item.cantidad > 0,
+    cantidad: mejor.item.cantidad,
+    doc: mejor.item,
+    score: mejor.score,
+    aproximado: true,
+    prendaCorregida: mejor.item.nombre,
+    colorCorregido: mejor.item.color,
+    tallaCorregida: mejor.item.talla,
+  };
+}
+
 function calcularEstado(cantidad) {
   if (cantidad === 0) return 'agotado';
   if (cantidad <= UMBRAL_BAJO) return 'bajo';
@@ -137,6 +189,7 @@ module.exports = {
   obtenerInventario,
   obtenerPrenda,
   verificarStock,
+  buscarFuzzy,
   obtenerAlternativas,
   descontarStock,
   agregarStock,

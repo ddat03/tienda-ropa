@@ -214,7 +214,12 @@ function TarjetaPedido({ pedido, procesando, onConfirmar, onRechazar }) {
 
       {/* Detalle de prenda */}
       <div className="mb-4">
-        <p className="text-xl font-bold capitalize">{pedido.prenda}</p>
+        <div className="flex items-center gap-2">
+          <p className="text-xl font-bold capitalize">{pedido.prenda}</p>
+          {pedido.aproximado && (
+            <span className="text-xs bg-yellow-800 text-yellow-300 px-1.5 py-0.5 rounded-md">corregido</span>
+          )}
+        </div>
         <div className="flex gap-2 mt-1">
           <span className="bg-gray-700 rounded-lg px-2 py-0.5 text-sm capitalize">{pedido.color}</span>
           <span className="bg-gray-700 rounded-lg px-2 py-0.5 text-sm font-mono">{pedido.talla}</span>
