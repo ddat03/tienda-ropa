@@ -1,7 +1,6 @@
 const { messaging } = require('../firebase');
-const { enviarMensaje } = require('../bot/whatsapp');
+const twilio = require('twilio');
 
-// Token FCM del dispositivo de la dueña (guardado en Firestore/config)
 let fcmTokenDuena = null;
 
 function setFcmTokenDuena(token) {
@@ -23,11 +22,15 @@ async function notificarDuena(mensaje) {
     );
   }
 
-  // WhatsApp directo a la dueña como respaldo
+  // WhatsApp directo a la dueña — usa Twilio directo para evitar dependencia circular
   if (process.env.OWNER_WHATSAPP) {
+    const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
     promesas.push(
-      enviarMensaje(process.env.OWNER_WHATSAPP, mensaje)
-        .catch(err => console.error('WhatsApp notif error:', err))
+      client.messages.create({
+        from: process.env.TWILIO_WHATSAPP_NUMBER,
+        to: process.env.OWNER_WHATSAPP,
+        body: mensaje,
+      }).catch(err => console.error('WhatsApp notif error:', err))
     );
   }
 

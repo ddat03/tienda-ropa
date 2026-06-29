@@ -6,6 +6,9 @@ const rateLimit = require('express-rate-limit');
 
 const app = express();
 
+// Necesario para que req.protocol sea 'https' detrás del proxy de Render
+app.set('trust proxy', 1);
+
 // ── Seguridad ──────────────────────────────────────────────────────────────────
 app.use(helmet());
 app.use(cors({
