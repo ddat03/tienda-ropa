@@ -10,27 +10,41 @@ export default function PanelLive() {
   const { pedidos, loading } = usePedidosLive();
   const api = useApi();
   const [procesando, setProcesando] = useState(null);
-  const [liveActivo, setLiveActivo] = useState(false);
   const [liveUsuario, setLiveUsuario] = useState('');
   const [inputUsuario, setInputUsuario] = useState('');
   const [conectando, setConectando] = useState(false);
+  // null | 'esperando' | 'en_live'
+  const [estadoTiktok, setEstadoTiktok] = useState(null);
 
   useEffect(() => {
     api.get('/tiktok/estado').then(data => {
-      setLiveActivo(data.activo);
-      if (data.usuario) setLiveUsuario(data.usuario);
+      if (data.vigilando) {
+        setLiveUsuario(data.usuario);
+        setEstadoTiktok(data.enLive ? 'en_live' : 'esperando');
+      }
     }).catch(() => {});
+
+    // Refresca el estado TikTok cada 15s para detectar cuando arranca el live
+    const intervalo = setInterval(() => {
+      api.get('/tiktok/estado').then(data => {
+        if (!data.vigilando) { setEstadoTiktok(null); setLiveUsuario(''); return; }
+        setLiveUsuario(data.usuario);
+        setEstadoTiktok(data.enLive ? 'en_live' : 'esperando');
+      }).catch(() => {});
+    }, 15000);
+
+    return () => clearInterval(intervalo);
   }, []);
 
-  async function iniciarLive() {
+  async function iniciarVigilancia() {
     if (!inputUsuario.trim()) return toast.error('Escribe el usuario de TikTok');
     setConectando(true);
     try {
       const data = await api.post('/tiktok/iniciar', { usuario: inputUsuario.trim() });
-      setLiveActivo(true);
-      setLiveUsuario(data.sesion.usuario);
+      setLiveUsuario(data.usuario);
+      setEstadoTiktok('esperando');
       setInputUsuario('');
-      toast.success(`🔴 Conectado a @${data.sesion.usuario}`);
+      toast.success(`👁️ Vigilando @${data.usuario} — se conectará al iniciar el live`);
     } catch (err) {
       toast.error(err.message);
     } finally {
@@ -38,13 +52,13 @@ export default function PanelLive() {
     }
   }
 
-  async function detenerLive() {
+  async function detenerVigilancia() {
     setConectando(true);
     try {
       await api.post('/tiktok/detener');
-      setLiveActivo(false);
+      setEstadoTiktok(null);
       setLiveUsuario('');
-      toast.success('⏹️ Live de TikTok desconectado');
+      toast.success('⏹️ Vigilancia desactivada');
     } catch (err) {
       toast.error(err.message);
     } finally {
@@ -92,40 +106,59 @@ export default function PanelLive() {
 
       {/* Control TikTok Live */}
       <div className="mb-4 bg-gray-900 rounded-2xl p-3 border border-gray-800">
-        {liveActivo ? (
+        {estadoTiktok === 'en_live' ? (
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Wifi className="w-4 h-4 text-green-400" />
+              <Wifi className="w-4 h-4 text-green-400 animate-pulse" />
               <span className="text-sm text-green-400 font-semibold">@{liveUsuario}</span>
-              <span className="text-xs text-gray-500">conectado</span>
+              <span className="text-xs bg-red-600 text-white px-1.5 py-0.5 rounded-md">EN LIVE</span>
             </div>
             <button
-              onClick={detenerLive}
+              onClick={detenerVigilancia}
               disabled={conectando}
               className="flex items-center gap-1.5 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 rounded-xl px-3 py-2 text-xs font-bold transition-colors"
             >
               <WifiOff className="w-3.5 h-3.5" />
-              {conectando ? 'Desconectando...' : 'Desconectar'}
+              Desactivar
+            </button>
+          </div>
+        ) : estadoTiktok === 'esperando' ? (
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse" />
+              <span className="text-sm text-yellow-400">Esperando live de</span>
+              <span className="text-sm text-white font-semibold">@{liveUsuario}</span>
+            </div>
+            <button
+              onClick={detenerVigilancia}
+              disabled={conectando}
+              className="flex items-center gap-1.5 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 rounded-xl px-3 py-2 text-xs font-bold transition-colors"
+            >
+              <WifiOff className="w-3.5 h-3.5" />
+              Cancelar
             </button>
           </div>
         ) : (
-          <div className="flex gap-2">
-            <input
-              type="text"
-              placeholder="Usuario TikTok (sin @)"
-              value={inputUsuario}
-              onChange={e => setInputUsuario(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && iniciarLive()}
-              className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm placeholder-gray-600 focus:outline-none focus:border-brand-500"
-            />
-            <button
-              onClick={iniciarLive}
-              disabled={conectando}
-              className="flex items-center gap-1.5 bg-brand-600 hover:bg-brand-500 disabled:opacity-50 rounded-xl px-3 py-2 text-xs font-bold transition-colors whitespace-nowrap"
-            >
-              <Wifi className="w-3.5 h-3.5" />
-              {conectando ? 'Conectando...' : 'Conectar'}
-            </button>
+          <div>
+            <p className="text-xs text-gray-500 mb-2">Usuario TikTok a vigilar (se conecta automático cuando empiece el live)</p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="usuario sin @"
+                value={inputUsuario}
+                onChange={e => setInputUsuario(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && iniciarVigilancia()}
+                className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm placeholder-gray-600 focus:outline-none focus:border-gray-500"
+              />
+              <button
+                onClick={iniciarVigilancia}
+                disabled={conectando}
+                className="flex items-center gap-1.5 bg-purple-700 hover:bg-purple-600 disabled:opacity-50 rounded-xl px-3 py-2 text-xs font-bold transition-colors whitespace-nowrap"
+              >
+                <Wifi className="w-3.5 h-3.5" />
+                {conectando ? 'Activando...' : 'Vigilar'}
+              </button>
+            </div>
           </div>
         )}
       </div>

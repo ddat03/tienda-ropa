@@ -5,79 +5,147 @@ const { verificarStock } = require('../inventory/inventario');
 const { crearPedido } = require('../orders/pedidos');
 const { notificarDuena } = require('../notifications/alertas');
 
+// Estado del módulo
 let connection = null;
-let sesionActual = null; // { id, usuario, roomId, iniciadoEn }
+let abortController = null;  // para cancelar waitUntilLive
+let sesionActual = null;     // { id, usuario, roomId, iniciadoEn }
+let usuarioVigilado = null;  // usuario configurado para auto-watch
+let enEspera = false;        // true = esperando que arranque el live
 
-async function iniciarLive(usuario) {
-  if (connection) {
-    throw new Error('Ya hay una sesión de TikTok Live activa. Detenla primero.');
-  }
+// ── API pública ───────────────────────────────────────────────────────────────
 
+async function activarVigilancia(usuario) {
   const usuarioLimpio = usuario.replace(/^@/, '').trim();
   if (!usuarioLimpio) throw new Error('Usuario de TikTok requerido');
+  if (usuarioVigilado) throw new Error('Ya hay una vigilancia activa. Desactívala primero.');
 
-  // tiktok-live-connector es ESM-only, se importa dinámicamente desde CommonJS
-  const { TikTokLiveConnection } = await import('tiktok-live-connector');
-
-  connection = new TikTokLiveConnection(usuarioLimpio, {
-    signApiKey: process.env.TIKTOK_SIGN_API_KEY || undefined,
-  });
-
-  connection.on('chat', (data) => {
-    procesarComentario(data).catch(err => console.error('[TikTok] Error procesando comentario:', err.message));
-  });
-
-  connection.on('disconnected', () => {
-    console.log('[TikTok] Desconectado del live');
-  });
-
-  connection.on('error', (err) => {
-    console.error('[TikTok] Error de conexión:', err?.message || err);
-  });
-
-  const estado = await connection.connect();
-
-  const sesionRef = await db.collection(COLECCIONES.SESIONES_LIVE).add({
-    usuario: usuarioLimpio,
-    roomId: estado.roomId,
-    activa: true,
-    iniciadoEn: new Date(),
-  });
-
-  sesionActual = { id: sesionRef.id, usuario: usuarioLimpio, roomId: estado.roomId, iniciadoEn: new Date() };
-
-  await notificarDuena(`🔴 Live de TikTok conectado: @${usuarioLimpio}`);
-
-  return sesionActual;
+  usuarioVigilado = usuarioLimpio;
+  _iniciarCiclo(usuarioLimpio); // no awaited: corre en background
+  return { ok: true, usuario: usuarioLimpio };
 }
 
-async function detenerLive() {
-  if (!connection) return { ok: true, mensaje: 'No había sesión activa' };
+async function desactivarVigilancia() {
+  usuarioVigilado = null;
+  enEspera = false;
 
-  await connection.disconnect();
-  connection = null;
-
-  if (sesionActual) {
-    await db.collection(COLECCIONES.SESIONES_LIVE).doc(sesionActual.id).update({
-      activa: false,
-      finalizadoEn: new Date(),
-    });
+  if (abortController) {
+    abortController.abort();
+    abortController = null;
   }
 
-  const usuario = sesionActual?.usuario;
-  sesionActual = null;
+  if (connection) {
+    await connection.disconnect();
+    connection = null;
+  }
 
-  if (usuario) await notificarDuena(`⏹️ Live de TikTok finalizado: @${usuario}`);
+  if (sesionActual) {
+    await db.collection(COLECCIONES.SESIONES_LIVE).doc(sesionActual.id)
+      .update({ activa: false, finalizadoEn: new Date() })
+      .catch(() => {});
+    const u = sesionActual.usuario;
+    sesionActual = null;
+    await notificarDuena(`⏹️ Vigilancia TikTok desactivada: @${u}`);
+  }
 
   return { ok: true };
 }
 
 function obtenerEstadoLive() {
   return {
-    activo: !!connection,
-    ...(sesionActual || {}),
+    vigilando: !!usuarioVigilado,
+    enLive: !!connection,
+    enEspera,
+    usuario: usuarioVigilado || null,
+    sesion: sesionActual,
   };
 }
+
+// ── Ciclo interno (auto-watch + reconexión) ────────────────────────────────
+
+async function _iniciarCiclo(usuario) {
+  while (usuarioVigilado === usuario) {
+    try {
+      const { TikTokLiveConnection } = await import('tiktok-live-connector');
+
+      // Fase 1: esperar a que empiece el live
+      connection = new TikTokLiveConnection(usuario, {
+        signApiKey: process.env.TIKTOK_SIGN_API_KEY || undefined,
+        fetchRoomInfoOnConnect: true,
+      });
+
+      enEspera = true;
+      console.log(`[TikTok] Esperando live de @${usuario}...`);
+
+      abortController = new AbortController();
+      await connection.waitUntilLive(30, abortController.signal);
+
+      // Si se abortó (desactivarVigilancia llamado), salir
+      if (usuarioVigilado !== usuario) break;
+
+      // Fase 2: conectar al live
+      enEspera = false;
+      _registrarEventos(connection);
+      const estado = await connection.connect();
+
+      // Guardar sesión en Firestore
+      const sesionRef = await db.collection(COLECCIONES.SESIONES_LIVE).add({
+        usuario,
+        roomId: estado.roomId,
+        activa: true,
+        iniciadoEn: new Date(),
+      });
+      sesionActual = { id: sesionRef.id, usuario, roomId: estado.roomId, iniciadoEn: new Date() };
+
+      await notificarDuena(`🔴 Live detectado automáticamente: @${usuario}`);
+      console.log(`[TikTok] Conectado al live de @${usuario} (room: ${estado.roomId})`);
+
+      // Fase 3: esperar a que termine el live (streamEnd o disconnect)
+      await new Promise(resolve => {
+        connection.on('streamEnd', resolve);
+        connection.on('disconnected', resolve);
+      });
+
+      // Live terminó
+      console.log(`[TikTok] Live terminado: @${usuario}`);
+      if (sesionActual) {
+        await db.collection(COLECCIONES.SESIONES_LIVE).doc(sesionActual.id)
+          .update({ activa: false, finalizadoEn: new Date() })
+          .catch(() => {});
+        sesionActual = null;
+      }
+      connection = null;
+
+      // Pausa breve antes de volver a esperar el siguiente live
+      await _sleep(10_000);
+
+    } catch (err) {
+      if (err.name === 'AbortError' || usuarioVigilado !== usuario) break;
+      console.error(`[TikTok] Error en ciclo: ${err.message}`);
+      connection = null;
+      sesionActual = null;
+      enEspera = false;
+      await _sleep(30_000); // esperar antes de reintentar
+    }
+  }
+
+  enEspera = false;
+  connection = null;
+  console.log(`[TikTok] Ciclo de vigilancia terminado para @${usuario}`);
+}
+
+function _registrarEventos(conn) {
+  conn.on('chat', (data) => {
+    procesarComentario(data).catch(err =>
+      console.error('[TikTok] Error procesando comentario:', err.message)
+    );
+  });
+
+  conn.on('error', (err) => {
+    console.error('[TikTok] Error de conexión:', err?.message || err);
+  });
+}
+
+// ── Procesamiento de comentarios ──────────────────────────────────────────────
 
 async function procesarComentario(data) {
   const texto = (data.comment || '').trim();
@@ -94,7 +162,7 @@ async function procesarComentario(data) {
     .get();
 
   if (clienteSnap.empty) {
-    console.log(`[TikTok] @${tiktokUser} escribió código inválido: ${codigoCliente}`);
+    console.log(`[TikTok] @${tiktokUser} — código inválido: ${codigoCliente}`);
     return;
   }
 
@@ -103,7 +171,7 @@ async function procesarComentario(data) {
 
   if (estaVencido(clienteData.fechaVencimiento)) {
     await clienteDoc.ref.update({ activo: false });
-    console.log(`[TikTok] @${tiktokUser} usó código vencido: ${codigoCliente}`);
+    console.log(`[TikTok] @${tiktokUser} — código vencido: ${codigoCliente}`);
     return;
   }
 
@@ -111,7 +179,7 @@ async function procesarComentario(data) {
   const stockInfo = await verificarStock(partes.prenda, partes.color, partes.talla);
 
   if (!stockInfo.disponible) {
-    console.log(`[TikTok] Sin stock para ${codigoCliente}: ${partes.prenda} ${partes.color} ${partes.talla}`);
+    console.log(`[TikTok] Sin stock — ${codigoCliente}: ${partes.prenda} ${partes.color} ${partes.talla}`);
     return;
   }
 
@@ -130,4 +198,8 @@ async function procesarComentario(data) {
   });
 }
 
-module.exports = { iniciarLive, detenerLive, obtenerEstadoLive };
+function _sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+module.exports = { activarVigilancia, desactivarVigilancia, obtenerEstadoLive };
