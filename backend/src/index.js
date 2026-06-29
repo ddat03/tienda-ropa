@@ -44,6 +44,9 @@ require('./notifications/scheduler');
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`🚀 Backend corriendo en puerto ${PORT}`);
+  console.log(`Firebase: ${process.env.FIREBASE_PROJECT_ID || '❌ NO CONFIGURADO'}`);
+  console.log(`Twilio SID: ${process.env.TWILIO_ACCOUNT_SID ? process.env.TWILIO_ACCOUNT_SID.slice(0,8) + '...' : '❌ NO CONFIGURADO'}`);
+  console.log(`Twilio WhatsApp: ${process.env.TWILIO_WHATSAPP_NUMBER || '❌ NO CONFIGURADO'}`);
 });
 
 module.exports = app;

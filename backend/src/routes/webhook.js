@@ -7,12 +7,14 @@ const { procesarMensaje } = require('../bot/whatsapp');
 router.post('/whatsapp', requireTwilioSignature, async (req, res) => {
   const { From, Body, ProfileName } = req.body;
 
-  // Responder a Twilio inmediatamente (evitar timeout)
-  res.sendStatus(200);
+  // Respuesta vacía — evita que Twilio reenvíe el body como mensaje de WhatsApp
+  res.status(200).end();
 
-  // Procesar en background
-  procesarMensaje(From, Body || '', ProfileName || '').catch(err => {
-    console.error('Error procesando webhook:', err);
+  const texto = (Body || '').trim();
+  console.log(`[Webhook] De: ${From} | Texto: "${texto}"`);
+
+  procesarMensaje(From, texto, ProfileName || '').catch(err => {
+    console.error('[Webhook] Error procesando mensaje:', err.message);
   });
 });
 
