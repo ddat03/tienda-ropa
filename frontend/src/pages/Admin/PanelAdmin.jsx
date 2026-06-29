@@ -1,0 +1,290 @@
+import { useState, useEffect } from 'react';
+import { useApi } from '../../hooks/useApi';
+import { PedidoBadge } from '../../components/shared/Badge';
+import toast from 'react-hot-toast';
+import { Users, ShoppingBag, TrendingUp, DollarSign, CheckCircle, Clock, Download } from 'lucide-react';
+import { format } from 'date-fns';
+import { es } from 'date-fns/locale';
+
+export default function PanelAdmin() {
+  const [seccion, setSeccion] = useState('clientes');
+
+  return (
+    <div className="min-h-screen bg-gray-50 pb-20">
+      <div className="bg-brand-600 text-white px-4 pt-10 pb-4">
+        <h1 className="text-xl font-bold">Administración</h1>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex bg-white border-b border-gray-200 sticky top-0 z-10">
+        {[
+          { id: 'clientes', icon: Users, label: 'Clientes' },
+          { id: 'ventas', icon: ShoppingBag, label: 'Ventas' },
+          { id: 'stats', icon: TrendingUp, label: 'Estadísticas' },
+        ].map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setSeccion(tab.id)}
+            className={`flex-1 flex flex-col items-center gap-0.5 py-2.5 text-xs font-medium border-b-2 transition-colors ${
+              seccion === tab.id
+                ? 'border-brand-600 text-brand-600'
+                : 'border-transparent text-gray-400 hover:text-gray-600'
+            }`}
+          >
+            <tab.icon className="w-4 h-4" />
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="p-4">
+        {seccion === 'clientes' && <SeccionClientes />}
+        {seccion === 'ventas' && <SeccionVentas />}
+        {seccion === 'stats' && <SeccionEstadisticas />}
+      </div>
+    </div>
+  );
+}
+
+// ── Sección Clientes ──────────────────────────────────────────────────────────
+function SeccionClientes() {
+  const api = useApi();
+  const [clientes, setClientes] = useState([]);
+  const [filtro, setFiltro] = useState('todos');
+
+  useEffect(() => {
+    api.get('/clientes').then(setClientes).catch(e => toast.error(e.message));
+  }, []);
+
+  const pendientes = clientes.filter(c => c.estado === 'pendiente_confirmacion');
+  const activos = clientes.filter(c => c.activo);
+
+  const mostrar = filtro === 'pendientes' ? pendientes
+    : filtro === 'activos' ? activos
+    : clientes;
+
+  async function confirmarAbono(clienteId) {
+    try {
+      const res = await api.post(`/clientes/confirmar-abono/${clienteId}`);
+      toast.success(`✅ Código asignado: ${res.codigo}`);
+      setClientes(prev => prev.map(c => c.id === clienteId
+        ? { ...c, activo: true, estado: 'activo', codigo: res.codigo }
+        : c
+      ));
+    } catch (err) {
+      toast.error(err.message);
+    }
+  }
+
+  return (
+    <div>
+      {pendientes.length > 0 && (
+        <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 mb-4 flex items-center gap-2">
+          <Clock className="w-4 h-4 text-orange-500 flex-shrink-0" />
+          <p className="text-sm text-orange-700">
+            <strong>{pendientes.length}</strong> abono{pendientes.length > 1 ? 's' : ''} esperando confirmación
+          </p>
+        </div>
+      )}
+
+      <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
+        {[['todos', 'Todos'], ['pendientes', '⏳ Pendientes'], ['activos', '✅ Activos']].map(([id, label]) => (
+          <button key={id} onClick={() => setFiltro(id)}
+            className={`whitespace-nowrap px-3 py-1 rounded-full text-xs font-medium ${
+              filtro === id ? 'bg-brand-600 text-white' : 'bg-gray-100 text-gray-600'
+            }`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <div className="space-y-2">
+        {mostrar.map(cliente => (
+          <TarjetaCliente key={cliente.id} cliente={cliente} onConfirmar={confirmarAbono} />
+        ))}
+        {mostrar.length === 0 && (
+          <p className="text-center text-gray-400 py-10">Sin clientes</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TarjetaCliente({ cliente, onConfirmar }) {
+  const esPendiente = cliente.estado === 'pendiente_confirmacion';
+  const urgente = cliente.diasRestantes !== null && cliente.diasRestantes <= 3 && cliente.activo;
+
+  return (
+    <div className={`bg-white rounded-xl p-3 shadow-sm ${urgente ? 'border border-orange-300' : ''}`}>
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="font-semibold text-gray-900">{cliente.nombre || 'Sin nombre'}</p>
+          <p className="text-xs text-gray-400 mt-0.5">{cliente.telefono?.replace('whatsapp:', '')}</p>
+        </div>
+        {esPendiente ? (
+          <button onClick={() => onConfirmar(cliente.id)}
+            className="bg-brand-600 text-white text-xs px-3 py-1.5 rounded-lg font-medium flex items-center gap-1">
+            <CheckCircle className="w-3.5 h-3.5" /> Confirmar abono
+          </button>
+        ) : (
+          <div className="text-right">
+            {cliente.codigo && (
+              <span className="font-mono font-bold text-brand-600 text-sm bg-brand-50 px-2 py-0.5 rounded-lg">
+                {cliente.codigo}
+              </span>
+            )}
+            {cliente.diasRestantes !== null && (
+              <p className={`text-xs mt-1 ${urgente ? 'text-orange-500 font-medium' : 'text-gray-400'}`}>
+                {cliente.diasRestantes > 0
+                  ? `${cliente.diasRestantes} días restantes`
+                  : 'Vencido'}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Sección Ventas ────────────────────────────────────────────────────────────
+function SeccionVentas() {
+  const api = useApi();
+  const [ventas, setVentas] = useState([]);
+
+  useEffect(() => {
+    api.get('/pedidos/historial').then(setVentas).catch(e => toast.error(e.message));
+  }, []);
+
+  function exportarCSV() {
+    const filas = [
+      ['Fecha', 'Código', 'Cliente', 'Prenda', 'Color', 'Talla', 'Precio'],
+      ...ventas.map(v => [
+        v.ventaEn ? format(new Date(v.ventaEn), 'dd/MM/yyyy HH:mm') : '',
+        v.codigoCliente,
+        v.nombre,
+        v.prenda,
+        v.color,
+        v.talla,
+        v.precio,
+      ])
+    ];
+    const csv = filas.map(r => r.join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `ventas_${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    link.click();
+  }
+
+  const totalIngresos = ventas.reduce((s, v) => s + (Number(v.precio) || 0), 0);
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <p className="text-sm text-gray-500">{ventas.length} ventas</p>
+          <p className="text-lg font-bold text-green-600">${totalIngresos.toFixed(2)}</p>
+        </div>
+        <button onClick={exportarCSV}
+          className="flex items-center gap-1.5 bg-green-600 text-white text-sm px-3 py-2 rounded-xl font-medium">
+          <Download className="w-4 h-4" /> Exportar CSV
+        </button>
+      </div>
+
+      <div className="space-y-2">
+        {ventas.map(venta => (
+          <div key={venta.id} className="bg-white rounded-xl p-3 shadow-sm">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="font-medium capitalize">{venta.prenda} {venta.color}</p>
+                <p className="text-xs text-gray-400">Talla {venta.talla} · {venta.codigoCliente}</p>
+              </div>
+              <div className="text-right">
+                {venta.precio > 0 && (
+                  <p className="font-bold text-green-600">${venta.precio}</p>
+                )}
+                {venta.ventaEn && (
+                  <p className="text-xs text-gray-400">
+                    {format(new Date(venta.ventaEn), 'dd MMM HH:mm', { locale: es })}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+        {ventas.length === 0 && <p className="text-center text-gray-400 py-10">Sin ventas registradas</p>}
+      </div>
+    </div>
+  );
+}
+
+// ── Sección Estadísticas ──────────────────────────────────────────────────────
+function SeccionEstadisticas() {
+  const api = useApi();
+  const [stats, setStats] = useState(null);
+
+  useEffect(() => {
+    api.get('/pedidos/estadisticas').then(setStats).catch(e => toast.error(e.message));
+  }, []);
+
+  if (!stats) return <div className="text-center py-12 text-gray-400">Cargando estadísticas...</div>;
+
+  return (
+    <div className="space-y-4">
+      {/* KPIs */}
+      <div className="grid grid-cols-2 gap-3">
+        <KpiCard icon={ShoppingBag} label="Total ventas" value={stats.totalVentas} color="brand" />
+        <KpiCard icon={DollarSign} label="Ingresos" value={`$${stats.ingresos}`} color="green" />
+      </div>
+
+      {/* Ranking prendas más vendidas */}
+      <div className="bg-white rounded-xl p-4 shadow-sm">
+        <h3 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
+          <TrendingUp className="w-4 h-4 text-brand-600" /> Más vendidas
+        </h3>
+        {stats.rankingPrendas.length === 0 ? (
+          <p className="text-gray-400 text-sm text-center py-4">Sin datos aún</p>
+        ) : (
+          <div className="space-y-2">
+            {stats.rankingPrendas.map((item, i) => (
+              <div key={item.prenda} className="flex items-center gap-3">
+                <span className={`text-sm font-bold w-6 text-center ${
+                  i === 0 ? 'text-yellow-500' : i === 1 ? 'text-gray-400' : i === 2 ? 'text-orange-600' : 'text-gray-300'
+                }`}>
+                  {i + 1}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium capitalize truncate">{item.prenda}</p>
+                  <div className="h-1.5 bg-gray-100 rounded-full mt-1 overflow-hidden">
+                    <div
+                      className="h-full bg-brand-500 rounded-full"
+                      style={{ width: `${(item.total / stats.rankingPrendas[0].total) * 100}%` }}
+                    />
+                  </div>
+                </div>
+                <span className="text-sm font-bold text-gray-700">{item.total}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function KpiCard({ icon: Icon, label, value, color }) {
+  const colors = {
+    brand: 'bg-brand-50 text-brand-600',
+    green: 'bg-green-50 text-green-600',
+  };
+  return (
+    <div className="bg-white rounded-xl p-4 shadow-sm">
+      <div className={`w-9 h-9 rounded-xl flex items-center justify-center mb-2 ${colors[color]}`}>
+        <Icon className="w-5 h-5" />
+      </div>
+      <p className="text-xl font-bold text-gray-900">{value}</p>
+      <p className="text-xs text-gray-400 mt-0.5">{label}</p>
+    </div>
+  );
+}

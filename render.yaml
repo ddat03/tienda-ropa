@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: tienda-ropa-backend
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: node src/index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      - key: FIREBASE_PRIVATE_KEY
+        sync: false
+      - key: FIREBASE_CLIENT_EMAIL
+        sync: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_WHATSAPP_NUMBER
+        sync: false
+      - key: OWNER_WHATSAPP
+        sync: false
+      - key: ABONO_MONTO
+        value: "20"
+      - key: DIAS_VIGENCIA
+        value: "15"
+      - key: DIAS_RECORDATORIO
+        value: "3"

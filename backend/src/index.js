@@ -1,0 +1,41 @@
+require('dotenv').config();
+const express = require('express');
+const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+
+const app = express();
+
+// ── Seguridad ──────────────────────────────────────────────────────────────────
+app.use(helmet());
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  credentials: true,
+}));
+
+// Twilio necesita body urlencoded para el webhook
+app.use('/webhook', express.urlencoded({ extended: false }));
+app.use(express.json());
+
+app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 200, message: 'Demasiadas solicitudes' }));
+
+// ── Rutas ──────────────────────────────────────────────────────────────────────
+app.use('/webhook', require('./routes/webhook'));
+app.use('/clientes', require('./routes/clientes'));
+app.use('/inventario', require('./routes/inventario'));
+app.use('/pedidos', require('./routes/pedidos'));
+app.use('/notificaciones', require('./routes/notificaciones'));
+
+// Health check
+app.get('/health', (_, res) => res.json({ status: 'ok', ts: new Date().toISOString() }));
+
+// ── Scheduler de vencimientos ──────────────────────────────────────────────────
+require('./notifications/scheduler');
+
+// ── Servidor ───────────────────────────────────────────────────────────────────
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, () => {
+  console.log(`🚀 Backend corriendo en puerto ${PORT}`);
+});
+
+module.exports = app;

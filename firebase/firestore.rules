@@ -1,0 +1,30 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Solo usuarios autenticados (la dueña) pueden leer/escribir
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    match /clientes/{clienteId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /pedidos/{pedidoId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /inventario/{itemId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /ventas/{ventaId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /sesiones_live/{sesionId} {
+      allow read, write: if isAuthenticated();
+    }
+  }
+}
