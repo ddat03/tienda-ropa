@@ -1,21 +1,42 @@
 const express = require('express');
 const router = express.Router();
-const { requireTwilioSignature } = require('../middleware/auth');
 const { procesarMensaje } = require('../bot/whatsapp');
 
-// POST /webhook/whatsapp — Twilio envía aquí cada mensaje entrante
-router.post('/whatsapp', requireTwilioSignature, async (req, res) => {
-  const { From, Body, ProfileName } = req.body;
+// GET /webhook/whatsapp — Meta verifica el endpoint con este challenge
+router.get('/whatsapp', (req, res) => {
+  const mode      = req.query['hub.mode'];
+  const token     = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
 
-  // Respuesta vacía — evita que Twilio reenvíe el body como mensaje de WhatsApp
+  if (mode === 'subscribe' && token === process.env.WHATSAPP_VERIFY_TOKEN) {
+    console.log('[Webhook] Meta verificó el webhook ✅');
+    return res.status(200).send(challenge);
+  }
+  res.status(403).end();
+});
+
+// POST /webhook/whatsapp — Meta envía aquí cada mensaje entrante
+router.post('/whatsapp', async (req, res) => {
+  // Responder 200 inmediatamente para que Meta no reintente
   res.status(200).end();
 
-  const texto = (Body || '').trim();
-  console.log(`[Webhook] De: ${From} | Texto: "${texto}"`);
+  try {
+    const change  = req.body?.entry?.[0]?.changes?.[0]?.value;
+    const mensaje = change?.messages?.[0];
 
-  procesarMensaje(From, texto, ProfileName || '').catch(err => {
+    // Solo procesar mensajes de texto (ignorar imágenes, reacciones, etc.)
+    if (!mensaje || mensaje.type !== 'text') return;
+
+    const from   = mensaje.from;            // "593XXXXXXXXX"
+    const texto  = mensaje.text?.body || '';
+    const nombre = change?.contacts?.[0]?.profile?.name || '';
+
+    console.log(`[Webhook] De: ${from} | Texto: "${texto}"`);
+
+    await procesarMensaje(from, texto, nombre);
+  } catch (err) {
     console.error('[Webhook] Error procesando mensaje:', err.message);
-  });
+  }
 });
 
 module.exports = router;

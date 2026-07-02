@@ -17,22 +17,4 @@ async function requireAuth(req, res, next) {
   }
 }
 
-// Twilio signature validation para el webhook
-const twilio = require('twilio');
-function requireTwilioSignature(req, res, next) {
-  const signature = req.headers['x-twilio-signature'];
-  const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
-  const valid = twilio.validateRequest(
-    process.env.TWILIO_AUTH_TOKEN,
-    signature,
-    url,
-    req.body
-  );
-
-  if (!valid && process.env.NODE_ENV === 'production') {
-    return res.status(403).json({ error: 'Firma inválida' });
-  }
-  next();
-}
-
-module.exports = { requireAuth, requireTwilioSignature };
+module.exports = { requireAuth };

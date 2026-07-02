@@ -2,16 +2,33 @@ const { db, COLECCIONES } = require('../firebase');
 const { descontarStock, verificarStock } = require('../inventory/inventario');
 const { MENSAJES } = require('../bot/mensajes');
 const { notificarDuena } = require('../notifications/alertas');
-const twilio = require('twilio');
+function normalizarNumero(tel) {
+  return tel.replace(/^whatsapp:/, '').replace(/^\+/, '').trim();
+}
 
-// Cliente Twilio local para evitar dependencia circular con bot/whatsapp.js
-function enviarMensaje(para, cuerpo) {
-  const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-  return client.messages.create({
-    from: process.env.TWILIO_WHATSAPP_NUMBER,
-    to: para,
-    body: cuerpo,
-  });
+async function enviarMensaje(para, cuerpo) {
+  const numero = normalizarNumero(para);
+  const resp = await fetch(
+    `https://graph.facebook.com/v19.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to: numero,
+        type: 'text',
+        text: { body: cuerpo },
+      }),
+    }
+  );
+  if (!resp.ok) {
+    const err = await resp.text();
+    throw new Error(`WhatsApp API error ${resp.status}: ${err}`);
+  }
+  return resp.json();
 }
 
 const ESTADOS = {

@@ -21,8 +21,6 @@ app.use(cors({
   credentials: true,
 }));
 
-// Twilio necesita body urlencoded para el webhook
-app.use('/webhook', express.urlencoded({ extended: false }));
 app.use(express.json());
 
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 200, message: 'Demasiadas solicitudes' }));
@@ -49,8 +47,8 @@ const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`🚀 Backend corriendo en puerto ${PORT}`);
   console.log(`Firebase: ${process.env.FIREBASE_PROJECT_ID || '❌ NO CONFIGURADO'}`);
-  console.log(`Twilio SID: ${process.env.TWILIO_ACCOUNT_SID ? process.env.TWILIO_ACCOUNT_SID.slice(0,8) + '...' : '❌ NO CONFIGURADO'}`);
-  console.log(`Twilio WhatsApp: ${process.env.TWILIO_WHATSAPP_NUMBER || '❌ NO CONFIGURADO'}`);
+  console.log(`WhatsApp Phone ID: ${process.env.WHATSAPP_PHONE_NUMBER_ID || '❌ NO CONFIGURADO'}`);
+  console.log(`WhatsApp Token: ${process.env.WHATSAPP_TOKEN ? '✅ configurado' : '❌ NO CONFIGURADO'}`);
 });
 
 module.exports = app;

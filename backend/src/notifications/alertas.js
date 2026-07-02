@@ -1,5 +1,4 @@
 const { messaging } = require('../firebase');
-const twilio = require('twilio');
 
 let fcmTokenDuena = null;
 
@@ -22,15 +21,27 @@ async function notificarDuena(mensaje) {
     );
   }
 
-  // WhatsApp directo a la dueña — usa Twilio directo para evitar dependencia circular
-  if (process.env.OWNER_WHATSAPP) {
-    const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+  // WhatsApp directo a la dueña vía Meta Cloud API
+  if (process.env.OWNER_WHATSAPP && process.env.WHATSAPP_PHONE_NUMBER_ID && process.env.WHATSAPP_TOKEN) {
+    const numero = process.env.OWNER_WHATSAPP.replace(/^whatsapp:/, '').replace(/^\+/, '').trim();
     promesas.push(
-      client.messages.create({
-        from: process.env.TWILIO_WHATSAPP_NUMBER,
-        to: process.env.OWNER_WHATSAPP,
-        body: mensaje,
-      }).catch(err => console.error('WhatsApp notif error:', err))
+      fetch(
+        `https://graph.facebook.com/v19.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            messaging_product: 'whatsapp',
+            to: numero,
+            type: 'text',
+            text: { body: mensaje },
+          }),
+        }
+      ).then(r => { if (!r.ok) r.text().then(t => console.error('WhatsApp notif error:', t)); })
+       .catch(err => console.error('WhatsApp notif error:', err))
     );
   }
 

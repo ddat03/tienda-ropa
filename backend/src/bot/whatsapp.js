@@ -1,21 +1,39 @@
-const twilio = require('twilio');
 const { db, COLECCIONES } = require('../firebase');
-const { generarCodigoUnico } = require('../utils/codigos');
-const { calcularFechaVencimiento, formatearFecha, diasRestantes, estaVencido } = require('../utils/fechas');
+const { estaVencido } = require('../utils/fechas');
 const { MENSAJES } = require('./mensajes');
 const { verificarStock, buscarFuzzy, obtenerAlternativas } = require('../inventory/inventario');
 const { crearPedido } = require('../orders/pedidos');
 const { notificarDuena } = require('../notifications/alertas');
 const { extraerCodigoPedido, parsearDetallePrenda } = require('../utils/parser');
 
-const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+// Normaliza cualquier formato de teléfono al que acepta Meta: "593XXXXXXXXX"
+function normalizarNumero(tel) {
+  return tel.replace(/^whatsapp:/, '').replace(/^\+/, '').trim();
+}
 
 async function enviarMensaje(para, cuerpo) {
-  return client.messages.create({
-    from: process.env.TWILIO_WHATSAPP_NUMBER,
-    to: para,
-    body: cuerpo,
-  });
+  const numero = normalizarNumero(para);
+  const resp = await fetch(
+    `https://graph.facebook.com/v19.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to: numero,
+        type: 'text',
+        text: { body: cuerpo },
+      }),
+    }
+  );
+  if (!resp.ok) {
+    const err = await resp.text();
+    throw new Error(`WhatsApp API error ${resp.status}: ${err}`);
+  }
+  return resp.json();
 }
 
 // Estado de conversación persistido en Firestore (sobrevive reinicios)
@@ -37,7 +55,7 @@ async function deleteEstado(telefono) {
 }
 
 async function procesarMensaje(de, cuerpo, nombreContacto = '') {
-  const telefono = de;
+  const telefono = de; // "593XXXXXXXXX" — formato Meta sin + ni whatsapp:
   const texto = cuerpo.trim().toUpperCase();
   const estado = await getEstado(telefono);
 
