@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useApi } from '../../hooks/useApi';
 import { PedidoBadge } from '../../components/shared/Badge';
 import toast from 'react-hot-toast';
-import { Users, ShoppingBag, TrendingUp, DollarSign, CheckCircle, Clock, Download } from 'lucide-react';
+import { Users, ShoppingBag, TrendingUp, DollarSign, CheckCircle, Clock, Download, UserPlus, ChevronDown, ChevronUp } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -18,9 +18,10 @@ export default function PanelAdmin() {
       {/* Tabs */}
       <div className="flex bg-white border-b border-gray-200 sticky top-0 z-10">
         {[
+          { id: 'suscripciones', icon: UserPlus, label: 'Suscripciones' },
           { id: 'clientes', icon: Users, label: 'Clientes' },
           { id: 'ventas', icon: ShoppingBag, label: 'Ventas' },
-          { id: 'stats', icon: TrendingUp, label: 'Estadísticas' },
+          { id: 'stats', icon: TrendingUp, label: 'Stats' },
         ].map(tab => (
           <button
             key={tab.id}
@@ -38,9 +39,204 @@ export default function PanelAdmin() {
       </div>
 
       <div className="p-4">
+        {seccion === 'suscripciones' && <SeccionSuscripciones />}
         {seccion === 'clientes' && <SeccionClientes />}
         {seccion === 'ventas' && <SeccionVentas />}
         {seccion === 'stats' && <SeccionEstadisticas />}
+      </div>
+    </div>
+  );
+}
+
+// ── Sección Suscripciones ─────────────────────────────────────────────────────
+const BANCOS = ['Banco Pichincha', 'Banco Guayaquil', 'Banco Pacífico', 'Produbanco', 'Banco Internacional', 'Banco del Austro', 'Cooperativa JEP', 'Cooperativa 29 de Octubre', 'Transferencia Nequi', 'Transferencia efectivo', 'Otro'];
+
+function SeccionSuscripciones() {
+  const api = useApi();
+  const [clientes, setClientes] = useState([]);
+  const [mostrarForm, setMostrarForm] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  const [busqueda, setBusqueda] = useState('');
+  const [form, setForm] = useState({
+    nombre: '', telefono: '', tiktokUser: '', banco: '', montoSuscripcion: '20', prendaSuscripcion: '',
+  });
+
+  useEffect(() => {
+    cargarClientes();
+  }, []);
+
+  async function cargarClientes() {
+    try {
+      const data = await api.get('/clientes');
+      setClientes(data.filter(c => c.origen === 'manual' || c.banco));
+    } catch (e) {
+      toast.error(e.message);
+    }
+  }
+
+  function setField(campo, valor) {
+    setForm(f => ({ ...f, [campo]: valor }));
+  }
+
+  async function registrar(e) {
+    e.preventDefault();
+    if (!form.nombre.trim()) return toast.error('Nombre requerido');
+    setGuardando(true);
+    try {
+      const res = await api.post('/clientes/registrar', form);
+      toast.success(`✅ Registrado — Código: ${res.codigo}`);
+      setForm({ nombre: '', telefono: '', tiktokUser: '', banco: '', montoSuscripcion: '20', prendaSuscripcion: '' });
+      setMostrarForm(false);
+      await cargarClientes();
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  function exportarCSV() {
+    const filas = [
+      ['Código', 'Nombre completo', 'Usuario TikTok', 'Banco', 'Monto suscripción', 'Prenda suscripción', 'Fecha registro'],
+      ...clientesFiltrados.map(c => [
+        c.codigo || '',
+        c.nombre || '',
+        c.tiktokUser || '',
+        c.banco || '',
+        c.montoSuscripcion || '',
+        c.prendaSuscripcion || '',
+        c.creadoEn ? format(new Date(c.creadoEn), 'dd/MM/yyyy') : '',
+      ]),
+    ];
+    const csv = '﻿' + filas.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `suscripciones_${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    link.click();
+  }
+
+  const clientesFiltrados = clientes.filter(c =>
+    !busqueda || [c.nombre, c.codigo, c.tiktokUser, c.banco].some(v => v?.toLowerCase().includes(busqueda.toLowerCase()))
+  );
+
+  return (
+    <div>
+      {/* Barra superior */}
+      <div className="flex items-center gap-2 mb-3">
+        <input
+          type="text" placeholder="Buscar nombre, código, TikTok..."
+          value={busqueda} onChange={e => setBusqueda(e.target.value)}
+          className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-brand-400"
+        />
+        <button onClick={exportarCSV}
+          className="flex items-center gap-1.5 bg-green-600 text-white text-xs px-3 py-2 rounded-xl font-medium whitespace-nowrap">
+          <Download className="w-3.5 h-3.5" /> Excel
+        </button>
+        <button onClick={() => setMostrarForm(f => !f)}
+          className="flex items-center gap-1.5 bg-brand-600 text-white text-xs px-3 py-2 rounded-xl font-medium whitespace-nowrap">
+          <UserPlus className="w-3.5 h-3.5" />
+          {mostrarForm ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+        </button>
+      </div>
+
+      {/* Formulario de registro */}
+      {mostrarForm && (
+        <form onSubmit={registrar} className="bg-brand-50 border border-brand-200 rounded-xl p-4 mb-4 space-y-3">
+          <h3 className="font-bold text-brand-800 text-sm">Nueva suscripción</h3>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <label className="text-xs text-gray-600 font-medium">Nombre completo *</label>
+              <input value={form.nombre} onChange={e => setField('nombre', e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm mt-1 focus:outline-none focus:border-brand-400"
+                placeholder="Ej: María García" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-600 font-medium">Teléfono WhatsApp</label>
+              <input value={form.telefono} onChange={e => setField('telefono', e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm mt-1 focus:outline-none focus:border-brand-400"
+                placeholder="593987654321" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-600 font-medium">Usuario TikTok</label>
+              <input value={form.tiktokUser} onChange={e => setField('tiktokUser', e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm mt-1 focus:outline-none focus:border-brand-400"
+                placeholder="sin @" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-600 font-medium">Banco / método de pago</label>
+              <select value={form.banco} onChange={e => setField('banco', e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm mt-1 focus:outline-none focus:border-brand-400 bg-white">
+                <option value="">Seleccionar...</option>
+                {BANCOS.map(b => <option key={b} value={b}>{b}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-gray-600 font-medium">Monto suscripción ($)</label>
+              <input type="number" value={form.montoSuscripcion} onChange={e => setField('montoSuscripcion', e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm mt-1 focus:outline-none focus:border-brand-400"
+                placeholder="20" min="0" step="0.01" />
+            </div>
+            <div className="col-span-2">
+              <label className="text-xs text-gray-600 font-medium">Prenda al suscribirse</label>
+              <input value={form.prendaSuscripcion} onChange={e => setField('prendaSuscripcion', e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm mt-1 focus:outline-none focus:border-brand-400"
+                placeholder="Ej: blusa rosada M" />
+            </div>
+          </div>
+          <div className="flex gap-2 pt-1">
+            <button type="submit" disabled={guardando}
+              className="flex-1 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white font-bold py-2.5 rounded-xl text-sm transition-colors">
+              {guardando ? 'Registrando...' : '✅ Registrar y generar código'}
+            </button>
+            <button type="button" onClick={() => setMostrarForm(false)}
+              className="bg-gray-100 hover:bg-gray-200 text-gray-600 font-medium py-2.5 px-4 rounded-xl text-sm transition-colors">
+              Cancelar
+            </button>
+          </div>
+        </form>
+      )}
+
+      {/* Contador */}
+      <p className="text-xs text-gray-400 mb-2">{clientesFiltrados.length} suscripción{clientesFiltrados.length !== 1 ? 'es' : ''}</p>
+
+      {/* Tabla */}
+      <div className="overflow-x-auto -mx-4">
+        <table className="w-full text-xs min-w-[600px]">
+          <thead>
+            <tr className="bg-gray-100 text-gray-500 uppercase tracking-wide">
+              <th className="px-3 py-2 text-left font-semibold">Código</th>
+              <th className="px-3 py-2 text-left font-semibold">Nombre</th>
+              <th className="px-3 py-2 text-left font-semibold">TikTok</th>
+              <th className="px-3 py-2 text-left font-semibold">Banco</th>
+              <th className="px-3 py-2 text-right font-semibold">Monto</th>
+              <th className="px-3 py-2 text-left font-semibold">Prenda</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {clientesFiltrados.map(c => (
+              <tr key={c.id} className="hover:bg-gray-50">
+                <td className="px-3 py-2">
+                  <span className="font-mono font-bold text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded">
+                    {c.codigo || '—'}
+                  </span>
+                </td>
+                <td className="px-3 py-2 font-medium text-gray-800">{c.nombre || '—'}</td>
+                <td className="px-3 py-2 text-gray-500">{c.tiktokUser ? `@${c.tiktokUser}` : '—'}</td>
+                <td className="px-3 py-2 text-gray-500">{c.banco || '—'}</td>
+                <td className="px-3 py-2 text-right font-semibold text-green-600">
+                  {c.montoSuscripcion ? `$${c.montoSuscripcion}` : '—'}
+                </td>
+                <td className="px-3 py-2 text-gray-500 capitalize">{c.prendaSuscripcion || '—'}</td>
+              </tr>
+            ))}
+            {clientesFiltrados.length === 0 && (
+              <tr>
+                <td colSpan={6} className="text-center text-gray-400 py-10">Sin registros</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );

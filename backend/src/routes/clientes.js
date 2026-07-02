@@ -31,6 +31,36 @@ router.get('/', requireAuth, async (req, res) => {
   }
 });
 
+// POST /clientes/registrar — registro manual directo desde el panel (sin WhatsApp)
+router.post('/registrar', requireAuth, async (req, res) => {
+  try {
+    const { nombre, telefono, tiktokUser, banco, montoSuscripcion, prendaSuscripcion } = req.body;
+    if (!nombre?.trim()) return res.status(400).json({ error: 'Nombre requerido' });
+
+    const codigo = await generarCodigoUnico();
+    const fechaVencimiento = calcularFechaVencimiento(Number(process.env.DIAS_VIGENCIA) || 15);
+
+    const ref = await db.collection(COLECCIONES.CLIENTES).add({
+      nombre: nombre.trim(),
+      telefono: telefono?.trim() || null,
+      tiktokUser: tiktokUser?.trim() || null,
+      banco: banco?.trim() || null,
+      montoSuscripcion: montoSuscripcion ? Number(montoSuscripcion) : 20,
+      prendaSuscripcion: prendaSuscripcion?.trim() || null,
+      codigo,
+      activo: true,
+      estado: 'activo',
+      fechaVencimiento,
+      creadoEn: new Date(),
+      origen: 'manual',
+    });
+
+    res.json({ ok: true, id: ref.id, codigo, fechaVencimiento });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /clientes/confirmar-abono/:clienteId — dueña confirma el abono manualmente
 router.post('/confirmar-abono/:clienteId', requireAuth, async (req, res) => {
   try {
