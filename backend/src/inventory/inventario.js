@@ -89,7 +89,7 @@ async function agregarStock(inventarioId, cantidad) {
 }
 
 async function crearPrenda(datos) {
-  const { nombre, color, talla, cantidad, precio, categoria, imagen } = datos;
+  const { nombre, color, talla, cantidad, precio, categoria, imagen, codigoPrenda } = datos;
   const estado = calcularEstado(cantidad);
 
   return db.collection(COLECCIONES.INVENTARIO).add({
@@ -102,6 +102,7 @@ async function crearPrenda(datos) {
     precio: Number(precio),
     categoria: categoria || 'general',
     imagen: imagen || '',
+    codigoPrenda: codigoPrenda || '',
     estado,
     creadoEn: new Date(),
     ultimaActualizacion: new Date(),

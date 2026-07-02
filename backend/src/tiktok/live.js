@@ -7,6 +7,7 @@ let connection = null;
 let sesionActual = null;
 let usuarioVigilado = null;
 let enLiveConectado = false;
+let prendaActiva = null; // prenda que está mostrando la dueña en cámara ahora mismo
 
 const CONFIG_DOC = () => db.collection('config').doc('tiktok');
 
@@ -67,7 +68,13 @@ function obtenerEstadoLive() {
     enEspera: !!usuarioVigilado && !enLiveConectado,
     usuario: usuarioVigilado || null,
     sesion: sesionActual,
+    prendaActiva,
   };
+}
+
+function setPrendaActiva(prenda) {
+  prendaActiva = prenda || null;
+  console.log(`[TikTok] Prenda activa: ${prendaActiva || '(ninguna)'}`);
 }
 
 // ── Ciclo: conectar directo, reintentar si falla ──────────────────────────────
@@ -157,7 +164,12 @@ async function procesarComentario(data) {
 
   const partes = parsearDetallePrenda(detalle);
 
-  console.log(`[TikTok] 📦 Pedido — @${tiktokUser} | ${codigoCliente} | ${partes.color} ${partes.talla}`);
+  // Usar prenda activa si el usuario no especificó una
+  if (partes.prenda === 'prenda' && prendaActiva) {
+    partes.prenda = prendaActiva;
+  }
+
+  console.log(`[TikTok] 📦 Pedido — @${tiktokUser} | ${codigoCliente} | ${partes.prenda} ${partes.color} ${partes.talla}`);
 
   await crearPedido({
     codigoCliente,
@@ -178,4 +190,4 @@ function _sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-module.exports = { activarVigilancia, desactivarVigilancia, obtenerEstadoLive, restaurarVigilancia };
+module.exports = { activarVigilancia, desactivarVigilancia, obtenerEstadoLive, restaurarVigilancia, setPrendaActiva };

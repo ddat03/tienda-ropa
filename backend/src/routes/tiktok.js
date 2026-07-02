@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { requireAuth } = require('../middleware/auth');
-const { activarVigilancia, desactivarVigilancia, obtenerEstadoLive } = require('../tiktok/live');
+const { activarVigilancia, desactivarVigilancia, obtenerEstadoLive, setPrendaActiva } = require('../tiktok/live');
 
 // GET /tiktok/estado
 router.get('/estado', requireAuth, (req, res) => {
@@ -31,5 +31,12 @@ router.post('/detener', requireAuth, async (req, res) => {
   }
 });
 
+
+// POST /tiktok/prenda — { prenda: "nombre" | null } — establece la prenda activa en cámara
+router.post('/prenda', requireAuth, (req, res) => {
+  const { prenda } = req.body;
+  setPrendaActiva(prenda || null);
+  res.json({ ok: true, prendaActiva: prenda || null });
+});
 
 module.exports = router;

@@ -104,7 +104,7 @@ export default function PanelInventario() {
       {/* FAB agregar */}
       <button
         onClick={() => setModalAgregar(true)}
-        className="fixed bottom-6 right-6 bg-brand-600 hover:bg-brand-700 text-white rounded-full w-14 h-14 flex items-center justify-center shadow-xl active:scale-95 transition-transform"
+        className="fixed bottom-24 right-4 bg-brand-600 hover:bg-brand-700 text-white rounded-full w-14 h-14 flex items-center justify-center shadow-xl active:scale-95 transition-transform z-10"
       >
         <Plus className="w-6 h-6" />
       </button>
@@ -214,7 +214,7 @@ function SkeletonList() {
 }
 
 function ModalNuevaPrenda({ onClose, onGuardar }) {
-  const [form, setForm] = useState({ nombre: '', color: '', talla: 'M', cantidad: 1, precio: '' });
+  const [form, setForm] = useState({ nombre: '', color: '', talla: 'M', cantidad: 1, precio: '', codigoPrenda: '', imagen: '' });
   const api = useApi();
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -243,6 +243,8 @@ function ModalEditarPrenda({ item, onClose, onGuardar }) {
     talla: item.talla,
     cantidad: item.cantidad,
     precio: item.precio || '',
+    codigoPrenda: item.codigoPrenda || '',
+    imagen: item.imagen || '',
   });
   const api = useApi();
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -283,16 +285,16 @@ function ModalAgregarStock({ prenda, onClose, onGuardar }) {
 
 function FormPrenda({ form, set }) {
   const tallas = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'ÚNICA'];
+  const inputCls = 'w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500';
   return (
     <div className="space-y-3">
       <input placeholder="Nombre de la prenda" value={form.nombre}
-        onChange={e => set('nombre', e.target.value)}
-        className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
+        onChange={e => set('nombre', e.target.value)} className={inputCls} />
+      <input placeholder="Código de prenda (ej: BL-001)" value={form.codigoPrenda || ''}
+        onChange={e => set('codigoPrenda', e.target.value)} className={inputCls} />
       <input placeholder="Color" value={form.color}
-        onChange={e => set('color', e.target.value)}
-        className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
-      <select value={form.talla} onChange={e => set('talla', e.target.value)}
-        className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        onChange={e => set('color', e.target.value)} className={inputCls} />
+      <select value={form.talla} onChange={e => set('talla', e.target.value)} className={inputCls}>
         {tallas.map(t => <option key={t}>{t}</option>)}
       </select>
       <div className="flex gap-2">
@@ -303,6 +305,8 @@ function FormPrenda({ form, set }) {
           onChange={e => set('precio', e.target.value)}
           className="flex-1 border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
       </div>
+      <input placeholder="URL de imagen (opcional)" value={form.imagen || ''}
+        onChange={e => set('imagen', e.target.value)} className={inputCls} />
     </div>
   );
 }
