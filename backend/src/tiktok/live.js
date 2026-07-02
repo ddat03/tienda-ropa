@@ -130,6 +130,8 @@ async function _iniciarCiclo(usuario) {
 
 function _registrarEventos(conn) {
   conn.on('chat', (data) => {
+    const texto = (data.comment || '').trim();
+    console.log(`[TikTok] 💬 chat recibido: "${texto}"`);
     procesarComentario(data).catch(err =>
       console.error('[TikTok] Error procesando comentario:', err.message)
     );
@@ -148,8 +150,9 @@ async function procesarComentario(data) {
 
   const codigoCliente = match[1].toUpperCase();
   const detalle = match[2].trim();
-  const tiktokUser = data.user?.uniqueId || 'desconocido';
-  const nombreTiktok = data.user?.nickname || tiktokUser;
+  // En v2.x, uniqueId/nickname están directamente en data (no anidados en data.user)
+  const tiktokUser = data.uniqueId || data.user?.uniqueId || 'desconocido';
+  const nombreTiktok = data.nickname || data.user?.nickname || tiktokUser;
 
   const partes = parsearDetallePrenda(detalle);
 
