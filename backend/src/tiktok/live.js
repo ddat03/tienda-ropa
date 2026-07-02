@@ -1,7 +1,5 @@
 const { db, COLECCIONES } = require('../firebase');
-const { estaVencido } = require('../utils/fechas');
 const { extraerCodigoPedido, parsearDetallePrenda } = require('../utils/parser');
-const { verificarStock, buscarFuzzy } = require('../inventory/inventario');
 const { crearPedido } = require('../orders/pedidos');
 const { notificarDuena } = require('../notifications/alertas');
 
@@ -146,6 +144,8 @@ function _registrarEventos(conn) {
 }
 
 // ── Procesamiento de comentarios ──────────────────────────────────────────────
+// En el live confiamos en lo que se escribe — sin validar base de datos.
+// La dueña revisa cada pedido en el panel y confirma o rechaza.
 
 async function procesarComentario(data) {
   const texto = (data.comment || '').trim();
@@ -155,51 +155,17 @@ async function procesarComentario(data) {
   const codigoCliente = match[1].toUpperCase();
   const detalle = match[2].trim();
   const tiktokUser = data.user?.uniqueId || 'desconocido';
-
-  const clienteSnap = await db.collection(COLECCIONES.CLIENTES)
-    .where('codigo', '==', codigoCliente)
-    .where('activo', '==', true)
-    .get();
-
-  if (clienteSnap.empty) {
-    console.log(`[TikTok] @${tiktokUser} — código inválido: ${codigoCliente}`);
-    return;
-  }
-
-  const clienteDoc = clienteSnap.docs[0];
-  const clienteData = clienteDoc.data();
-
-  if (estaVencido(clienteData.fechaVencimiento)) {
-    await clienteDoc.ref.update({ activo: false });
-    console.log(`[TikTok] @${tiktokUser} — código vencido: ${codigoCliente}`);
-    return;
-  }
+  const nombreTiktok = data.user?.nickname || tiktokUser;
 
   const partes = parsearDetallePrenda(detalle);
 
-  // Verificar stock exacto; si no hay, intentar fuzzy matching
-  let stockInfo = await verificarStock(partes.prenda, partes.color, partes.talla);
-
-  if (!stockInfo.disponible) {
-    const fuzzy = await buscarFuzzy(partes.prenda, partes.color, partes.talla);
-    if (fuzzy?.disponible) {
-      stockInfo = fuzzy;
-      partes.prenda = fuzzy.prendaCorregida;
-      partes.color = fuzzy.colorCorregido;
-      partes.talla = fuzzy.tallaCorregida;
-    }
-  }
-
-  if (!stockInfo.disponible) {
-    console.log(`[TikTok] Sin stock — ${codigoCliente}: ${partes.prenda} ${partes.color} ${partes.talla}`);
-    return;
-  }
+  console.log(`[TikTok] Pedido detectado — @${tiktokUser} | código: ${codigoCliente} | ${partes.prenda} ${partes.color} ${partes.talla}`);
 
   await crearPedido({
     codigoCliente,
-    clienteId: clienteDoc.id,
-    telefono: clienteData.telefono,
-    nombre: clienteData.nombre || tiktokUser,
+    clienteId: null,
+    telefono: null,
+    nombre: nombreTiktok,
     prenda: partes.prenda,
     color: partes.color,
     talla: partes.talla,
@@ -207,7 +173,6 @@ async function procesarComentario(data) {
     origen: 'tiktok',
     tiktokUser,
     sesionLiveId: sesionActual?.id || null,
-    aproximado: stockInfo.aproximado || false,
   });
 }
 
