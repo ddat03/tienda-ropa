@@ -1,11 +1,15 @@
-// Acepta: ROC-AB23, ROCAB23, ROC AB23 (case-insensitive)
-const REGEX_CODIGO_PEDIDO = /^ROC[-\s]?([A-Z0-9]{4})\s+(.+)$/i;
+// Acepta todos los formatos reales del live:
+//   Na906 gris            → código=NA906, resto=gris
+//   #Ib811 celeste        → código=IB811, resto=celeste
+//   Código #Es384 vino    → código=ES384, resto=vino
+//   ROC-AB23 blusa M      → código=ROC-AB23, resto=blusa M
+const REGEX_CODIGO_PEDIDO = /(?:c[oó]digo\s+)?#?(ROC[-\s]?[A-Z0-9]{4}|[A-Z]{1,4}[0-9]{2,5})\s+(.+)/i;
 
 function extraerCodigoPedido(texto) {
   const match = texto.trim().match(REGEX_CODIGO_PEDIDO);
   if (!match) return null;
-  // Normaliza siempre a ROC-XXXX en mayúsculas
-  return [match[0], `ROC-${match[1].toUpperCase()}`, match[2]];
+  const codigo = match[1].replace(/[-\s]/g, '').toUpperCase();
+  return [match[0], codigo, match[2]];
 }
 
 const TALLAS_ES = {
@@ -45,8 +49,16 @@ function parsearDetallePrenda(texto) {
     }
   }
 
-  const prenda = resto[0] || 'prenda';
-  const color = resto.slice(1).join(' ') || 'sin color';
+  // En el live la gente escribe solo "color" o "prenda color"
+  // Si hay una sola palabra no-talla, asumimos que es el color
+  let prenda, color;
+  if (resto.length === 0) {
+    prenda = 'prenda'; color = 'sin color';
+  } else if (resto.length === 1) {
+    prenda = 'prenda'; color = resto[0]; // solo dieron color
+  } else {
+    prenda = resto[0]; color = resto.slice(1).join(' ');
+  }
 
   return { prenda, color, talla };
 }
