@@ -31,22 +31,5 @@ router.post('/detener', requireAuth, async (req, res) => {
   }
 });
 
-// GET /tiktok/ping?usuario=xxx — diagnóstico: intenta conectar y reporta el error exacto
-router.get('/ping', async (req, res) => {
-  const { usuario } = req.query;
-  if (!usuario) return res.json({ error: 'Falta ?usuario=xxx' });
-  try {
-    const { TikTokLiveConnection } = await import('tiktok-live-connector');
-    const conn = new TikTokLiveConnection(usuario, { fetchRoomInfoOnConnect: true });
-    const estado = await Promise.race([
-      conn.connect().then(s => ({ ok: true, roomId: s.roomId })),
-      new Promise((_, rej) => setTimeout(() => rej(new Error('Timeout 15s')), 15000)),
-    ]);
-    await conn.disconnect().catch(() => {});
-    res.json(estado);
-  } catch (err) {
-    res.json({ ok: false, error: err.message, tipo: err.constructor.name });
-  }
-});
 
 module.exports = router;

@@ -88,11 +88,13 @@ async function confirmarPedido(pedidoId) {
     inventarioId: stockInfo.doc.id,
   });
 
-  // Notificar al cliente
-  await enviarMensaje(
-    pedido.telefono,
-    MENSAJES.pedidoConfirmado(pedido.codigoCliente, pedido.prenda, pedido.color, pedido.talla)
-  );
+  // Notificar al cliente (solo si tiene teléfono — pedidos TikTok no lo tienen)
+  if (pedido.telefono) {
+    await enviarMensaje(
+      pedido.telefono,
+      MENSAJES.pedidoConfirmado(pedido.codigoCliente, pedido.prenda, pedido.color, pedido.talla)
+    );
+  }
 
   return { ok: true };
 }
@@ -110,10 +112,12 @@ async function rechazarPedido(pedidoId, motivo = 'no está disponible en este mo
     actualizadoEn: new Date(),
   });
 
-  await enviarMensaje(
-    pedido.telefono,
-    MENSAJES.pedidoRechazado(pedido.prenda, pedido.color, pedido.talla, motivo)
-  );
+  if (pedido.telefono) {
+    await enviarMensaje(
+      pedido.telefono,
+      MENSAJES.pedidoRechazado(pedido.prenda, pedido.color, pedido.talla, motivo)
+    );
+  }
 
   return { ok: true };
 }
