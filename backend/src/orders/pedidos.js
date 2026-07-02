@@ -1,8 +1,18 @@
 const { db, COLECCIONES } = require('../firebase');
 const { descontarStock, verificarStock } = require('../inventory/inventario');
-const { enviarMensaje } = require('../bot/whatsapp');
 const { MENSAJES } = require('../bot/mensajes');
 const { notificarDuena } = require('../notifications/alertas');
+const twilio = require('twilio');
+
+// Cliente Twilio local para evitar dependencia circular con bot/whatsapp.js
+function enviarMensaje(para, cuerpo) {
+  const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+  return client.messages.create({
+    from: process.env.TWILIO_WHATSAPP_NUMBER,
+    to: para,
+    body: cuerpo,
+  });
+}
 
 const ESTADOS = {
   PENDIENTE: 'pendiente',
