@@ -8,6 +8,23 @@ let sesionActual = null;
 let usuarioVigilado = null;
 let enLiveConectado = false;
 
+const CONFIG_DOC = () => db.collection('config').doc('tiktok');
+
+// ── Arranque: restaurar vigilancia si el backend se reinició ─────────────────
+async function restaurarVigilancia() {
+  try {
+    const doc = await CONFIG_DOC().get();
+    if (doc.exists && doc.data().usuarioVigilado) {
+      const usuario = doc.data().usuarioVigilado;
+      console.log(`[TikTok] Restaurando vigilancia de @${usuario} tras reinicio`);
+      usuarioVigilado = usuario;
+      _iniciarCiclo(usuario);
+    }
+  } catch (err) {
+    console.error('[TikTok] Error restaurando vigilancia:', err.message);
+  }
+}
+
 // ── API pública ───────────────────────────────────────────────────────────────
 
 async function activarVigilancia(usuario) {
@@ -16,6 +33,7 @@ async function activarVigilancia(usuario) {
   if (usuarioVigilado) throw new Error('Ya hay una vigilancia activa. Desactívala primero.');
 
   usuarioVigilado = usuarioLimpio;
+  await CONFIG_DOC().set({ usuarioVigilado: usuarioLimpio, activadoEn: new Date() });
   _iniciarCiclo(usuarioLimpio);
   return { ok: true, usuario: usuarioLimpio };
 }
@@ -24,6 +42,8 @@ async function desactivarVigilancia() {
   const u = usuarioVigilado;
   usuarioVigilado = null;
   enLiveConectado = false;
+
+  await CONFIG_DOC().delete().catch(() => {});
 
   if (connection) {
     try { await connection.disconnect(); } catch (_) {}
@@ -59,7 +79,7 @@ async function _iniciarCiclo(usuario) {
 
       connection = new TikTokLiveConnection(usuario, {
         signApiKey: process.env.TIKTOK_SIGN_API_KEY || undefined,
-        fetchRoomInfoOnConnect: false, // no verificar si está live, conectar directo
+        fetchRoomInfoOnConnect: true,
       });
 
       _registrarEventos(connection);
@@ -154,4 +174,4 @@ function _sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-module.exports = { activarVigilancia, desactivarVigilancia, obtenerEstadoLive };
+module.exports = { activarVigilancia, desactivarVigilancia, obtenerEstadoLive, restaurarVigilancia };

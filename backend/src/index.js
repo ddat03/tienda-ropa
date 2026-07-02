@@ -35,6 +35,9 @@ app.use('/pedidos', require('./routes/pedidos'));
 app.use('/notificaciones', require('./routes/notificaciones'));
 app.use('/tiktok', require('./routes/tiktok'));
 
+// Restaurar vigilancia TikTok si el backend se reinició
+require('./tiktok/live').restaurarVigilancia();
+
 // Health check
 app.get('/health', (_, res) => res.json({ status: 'ok', ts: new Date().toISOString() }));
 
