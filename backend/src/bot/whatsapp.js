@@ -29,11 +29,13 @@ async function enviarMensaje(para, cuerpo) {
       }),
     }
   );
+  const body = await resp.json();
   if (!resp.ok) {
-    const err = await resp.text();
-    throw new Error(`WhatsApp API error ${resp.status}: ${err}`);
+    console.error(`[WhatsApp] Error enviando a ${numero}:`, JSON.stringify(body));
+    throw new Error(`WhatsApp API error ${resp.status}`);
   }
-  return resp.json();
+  console.log(`[WhatsApp] Mensaje enviado a ${numero} — id: ${body?.messages?.[0]?.id}`);
+  return body;
 }
 
 // Estado de conversación persistido en Firestore (sobrevive reinicios)
