@@ -92,6 +92,7 @@ async function confirmarPedido(pedidoId) {
     clienteId: pedido.clienteId,
     telefono: pedido.telefono,
     nombre: pedido.nombre,
+    tiktokUser: pedido.tiktokUser || null,
     prenda: pedido.prenda,
     color: pedido.color,
     talla: pedido.talla,

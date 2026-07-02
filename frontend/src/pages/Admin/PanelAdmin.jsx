@@ -347,25 +347,34 @@ function TarjetaCliente({ cliente, onConfirmar }) {
 function SeccionVentas() {
   const api = useApi();
   const [ventas, setVentas] = useState([]);
+  const [busqueda, setBusqueda] = useState('');
 
   useEffect(() => {
     api.get('/pedidos/historial').then(setVentas).catch(e => toast.error(e.message));
   }, []);
 
+  const ventasFiltradas = ventas.filter(v =>
+    !busqueda || [v.nombre, v.codigoCliente, v.prenda, v.color, v.tiktokUser]
+      .some(val => val?.toLowerCase().includes(busqueda.toLowerCase()))
+  );
+
+  const totalIngresos = ventasFiltradas.reduce((s, v) => s + (Number(v.precio) || 0), 0);
+
   function exportarCSV() {
     const filas = [
-      ['Fecha', 'Código', 'Cliente', 'Prenda', 'Color', 'Talla', 'Precio'],
-      ...ventas.map(v => [
+      ['Fecha', 'Código', 'Nombre', 'TikTok', 'Prenda', 'Color', 'Talla', 'Precio'],
+      ...ventasFiltradas.map(v => [
         v.ventaEn ? format(new Date(v.ventaEn), 'dd/MM/yyyy HH:mm') : '',
-        v.codigoCliente,
-        v.nombre,
-        v.prenda,
-        v.color,
-        v.talla,
-        v.precio,
-      ])
+        v.codigoCliente || '',
+        v.nombre || '',
+        v.tiktokUser ? `@${v.tiktokUser}` : '',
+        v.prenda || '',
+        v.color || '',
+        v.talla || '',
+        v.precio || 0,
+      ]),
     ];
-    const csv = filas.map(r => r.join(',')).join('\n');
+    const csv = '﻿' + filas.map(r => r.map(val => `"${val}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
@@ -373,43 +382,75 @@ function SeccionVentas() {
     link.click();
   }
 
-  const totalIngresos = ventas.reduce((s, v) => s + (Number(v.precio) || 0), 0);
-
   return (
     <div>
-      <div className="flex items-center justify-between mb-3">
-        <div>
-          <p className="text-sm text-gray-500">{ventas.length} ventas</p>
-          <p className="text-lg font-bold text-green-600">${totalIngresos.toFixed(2)}</p>
-        </div>
+      {/* Barra superior */}
+      <div className="flex items-center gap-2 mb-3">
+        <input
+          type="text" placeholder="Buscar nombre, código, prenda..."
+          value={busqueda} onChange={e => setBusqueda(e.target.value)}
+          className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-brand-400"
+        />
         <button onClick={exportarCSV}
-          className="flex items-center gap-1.5 bg-green-600 text-white text-sm px-3 py-2 rounded-xl font-medium">
-          <Download className="w-4 h-4" /> Exportar CSV
+          className="flex items-center gap-1.5 bg-green-600 text-white text-xs px-3 py-2 rounded-xl font-medium whitespace-nowrap">
+          <Download className="w-3.5 h-3.5" /> Excel
         </button>
       </div>
 
-      <div className="space-y-2">
-        {ventas.map(venta => (
-          <div key={venta.id} className="bg-white rounded-xl p-3 shadow-sm">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="font-medium capitalize">{venta.prenda} {venta.color}</p>
-                <p className="text-xs text-gray-400">Talla {venta.talla} · {venta.codigoCliente}</p>
-              </div>
-              <div className="text-right">
-                {venta.precio > 0 && (
-                  <p className="font-bold text-green-600">${venta.precio}</p>
-                )}
-                {venta.ventaEn && (
-                  <p className="text-xs text-gray-400">
-                    {format(new Date(venta.ventaEn), 'dd MMM HH:mm', { locale: es })}
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-        ))}
-        {ventas.length === 0 && <p className="text-center text-gray-400 py-10">Sin ventas registradas</p>}
+      {/* Resumen */}
+      <div className="flex items-center gap-3 mb-3">
+        <span className="text-xs text-gray-400">{ventasFiltradas.length} venta{ventasFiltradas.length !== 1 ? 's' : ''}</span>
+        <span className="text-sm font-bold text-green-600">${totalIngresos.toFixed(2)}</span>
+      </div>
+
+      {/* Tabla */}
+      <div className="overflow-x-auto -mx-4">
+        <table className="w-full text-xs min-w-[620px]">
+          <thead>
+            <tr className="bg-gray-100 text-gray-500 uppercase tracking-wide">
+              <th className="px-3 py-2 text-left font-semibold">Fecha</th>
+              <th className="px-3 py-2 text-left font-semibold">Código</th>
+              <th className="px-3 py-2 text-left font-semibold">Nombre / TikTok</th>
+              <th className="px-3 py-2 text-left font-semibold">Prenda</th>
+              <th className="px-3 py-2 text-left font-semibold">Color</th>
+              <th className="px-3 py-2 text-center font-semibold">Talla</th>
+              <th className="px-3 py-2 text-right font-semibold">Precio</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {ventasFiltradas.map(v => (
+              <tr key={v.id} className="hover:bg-gray-50">
+                <td className="px-3 py-2 text-gray-400 whitespace-nowrap">
+                  {v.ventaEn ? format(new Date(v.ventaEn), 'dd/MM HH:mm') : '—'}
+                </td>
+                <td className="px-3 py-2">
+                  <span className="font-mono font-bold text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded">
+                    {v.codigoCliente || '—'}
+                  </span>
+                </td>
+                <td className="px-3 py-2">
+                  <p className="font-medium text-gray-800 truncate max-w-[120px]">{v.nombre || '—'}</p>
+                  {v.tiktokUser && (
+                    <p className="text-[10px] text-gray-400">@{v.tiktokUser}</p>
+                  )}
+                </td>
+                <td className="px-3 py-2 text-gray-700 capitalize">{v.prenda || '—'}</td>
+                <td className="px-3 py-2 text-gray-500 capitalize">{v.color || '—'}</td>
+                <td className="px-3 py-2 text-center">
+                  <span className="font-mono bg-gray-100 px-1.5 py-0.5 rounded">{v.talla || '—'}</span>
+                </td>
+                <td className="px-3 py-2 text-right font-semibold text-green-600">
+                  {v.precio > 0 ? `$${v.precio}` : '—'}
+                </td>
+              </tr>
+            ))}
+            {ventasFiltradas.length === 0 && (
+              <tr>
+                <td colSpan={7} className="text-center text-gray-400 py-10">Sin ventas registradas</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );
