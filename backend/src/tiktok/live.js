@@ -130,7 +130,8 @@ async function _iniciarCiclo(usuario) {
 
 function _registrarEventos(conn) {
   conn.on('chat', (data) => {
-    const texto = (data.comment || '').trim();
+    // v2.x usa data.content (no data.comment)
+    const texto = (data.content || '').trim();
     console.log(`[TikTok] 💬 chat recibido: "${texto}"`);
     procesarComentario(data).catch(err =>
       console.error('[TikTok] Error procesando comentario:', err.message)
@@ -144,15 +145,15 @@ function _registrarEventos(conn) {
 // ── Procesamiento de comentarios ──────────────────────────────────────────────
 
 async function procesarComentario(data) {
-  const texto = (data.comment || '').trim();
+  // v2.x: texto en data.content, usuario en data.user.displayId / data.user.nickname
+  const texto = (data.content || '').trim();
   const match = extraerCodigoPedido(texto);
   if (!match) return;
 
   const codigoCliente = match[1].toUpperCase();
   const detalle = match[2].trim();
-  // En v2.x, uniqueId/nickname están directamente en data (no anidados en data.user)
-  const tiktokUser = data.uniqueId || data.user?.uniqueId || 'desconocido';
-  const nombreTiktok = data.nickname || data.user?.nickname || tiktokUser;
+  const tiktokUser = data.user?.displayId || data.user?.uniqueId || 'desconocido';
+  const nombreTiktok = data.user?.nickname || tiktokUser;
 
   const partes = parsearDetallePrenda(detalle);
 
